@@ -25,7 +25,7 @@ class ContentEdit.Table extends ContentEdit.ElementCollection
         # one).
         if section = @thead()
             return section
-        else if section =  @tbody()
+        else if section = @tbody()
             return section
         else if section = @tfoot()
             return section
@@ -36,7 +36,7 @@ class ContentEdit.Table extends ContentEdit.ElementCollection
         # one).
         if section = @tfoot()
             return section
-        else if section =  @tbody()
+        else if section = @tbody()
             return section
         else if section = @thead()
             return section
@@ -118,7 +118,7 @@ class ContentEdit.Table extends ContentEdit.ElementCollection
                 when 'tr'
                     orphanRows.push(
                         ContentEdit.TableRow.fromDOMElement(childNode)
-                        )
+                    )
 
         # If there are orphan rows
         if orphanRows.length > 0
@@ -173,7 +173,7 @@ class ContentEdit.TableSection extends ContentEdit.ElementCollection
         section = new @(
             domElement.tagName,
             @getDOMElementAttributes(domElement)
-            )
+        )
 
         # Create a list if child nodes we can safely remove whilst iterating
         # through them.
@@ -292,14 +292,121 @@ class ContentEdit.TableCell extends ContentEdit.ElementCollection
 
     # Methods
 
-    html: (indent='') ->
+    html: (indent = '') ->
         lines = [
             "#{ indent }<#{ @tagName() }#{ @_attributesToString() }>"
-            ]
+        ]
         if @tableCellText()
             lines.push(@tableCellText().html(indent + ContentEdit.INDENT))
         lines.push("#{ indent }</#{ @tagName() }>")
         return lines.join(ContentEdit.LINE_ENDINGS)
+
+    attr: (name, value) ->
+        # grab the previous values before rewriting
+        prevColspan = parseInt(@_attributes['colspan']) ? 0
+        prevRowspan = parseInt(@_attributes['rowspan']) ? 0
+
+        super(name, value)
+
+        if value is undefined
+            # not interested in getters
+            return
+
+        rowLength = @parent().children.length
+        cellIndex = @parent().children.indexOf this
+
+        # on colspan we need to remove cells on the left or right or both
+        if name is 'colspan'
+            colspan = parseInt(value)
+            if colspan is 0 or isNaN(colspan)
+                # invalid value
+                return
+
+            if prevColspan > colspan
+                # if lowering the value, we need to add elements, not remove
+                for i in [0...prevColspan - colspan]
+                    newCell = new ContentEdit.TableCell(@tagName())
+                    newCell.attach(new ContentEdit.TableCellText(''))
+                    @parent().attach newCell
+                return
+
+            cellsToDelete = colspan - 1
+
+            # how many cells we could delete on each direction
+            maxDelRight = rowLength - 1 - cellIndex
+            maxDelLeft = rowLength - 1 - maxDelRight
+
+            # how many cells we actually delete on each direction
+            delRight = Math.min cellsToDelete, maxDelRight
+            delLeft = Math.min cellsToDelete - delRight, maxDelLeft
+
+            if delRight > 0
+                # delete necessary items on the right
+                for i in [cellIndex + 1..cellIndex + delRight]
+                    @parent().children[i]._domElement.remove()
+
+            if delLeft > 0
+                # delete necessary items on the left
+                for i in [cellIndex - delLeft...cellIndex]
+                    @parent().children[i]._domElement.remove()
+
+        # on rowspan we need to remove cells under the current cell
+        if name is 'rowspan'
+            rowspan = parseInt(value)
+            if rowspan is 0 or isNaN(rowspan)
+                # invalid value, do nothing
+                return
+
+            row = @parent()
+            section = row.parent()
+            rowIndex = section.children.indexOf row
+
+            if prevRowspan > rowspan
+                # if lowering the value, we need to add elements, not remove
+                diff = prevRowspan - rowspan
+                for i in [rowIndex + rowspan...rowIndex + rowspan + diff]
+                    newCell = new ContentEdit.TableCell(@tagName())
+                    newCell.attach(new ContentEdit.TableCellText(''))
+                    section.children[i].attach newCell
+                return
+
+            for i in [rowIndex + 1...rowIndex + rowspan]
+                # remove column
+                cells = section.children[i]?.children
+                if not cells
+                    return
+                if cellIndex < cells.length
+                    cells[cellIndex]._domElement.remove()
+                else
+                    cells[0]._domElement.remove()
+
+
+    removeAttr: (name) ->
+        prevColspan = parseInt(@_attributes['colspan']) ? 0
+        prevRowspan = parseInt(@_attributes['rowspan']) ? 0
+        super(name)
+
+        if name is 'colspan' and prevColspan > 0
+            # we need to add cells to fill the row
+            cellsNum = prevColspan - 1
+            for i in [0...cellsNum]
+                newCell = new ContentEdit.TableCell(@tagName())
+                newCell.attach(new ContentEdit.TableCellText)
+                @parent().attach newCell
+
+        if name is 'rowspan' and prevRowspan > 0
+            # we need to add cells to fill the rows
+            row = @parent()
+            section = row.parent()
+            rowIndex = section.children.indexOf row
+
+            for i in [rowIndex + 1...rowIndex + prevRowspan]
+                # add column
+                newCell = new ContentEdit.TableCell(@tagName())
+                newCell.attach(new ContentEdit.TableCellText)
+                row = section.children[i]
+                if row
+                    row.attach newCell
 
     # Event handlers
 
@@ -314,19 +421,19 @@ class ContentEdit.TableCell extends ContentEdit.ElementCollection
     _addDOMEventListeners: () ->
     _removeDOMEventListners: () ->
 
-    # Class methods
+        # Class methods
 
     @fromDOMElement: (domElement) ->
         # Convert an element (DOM) to an element of this type
         tableCell = new @(
             domElement.tagName
             @getDOMElementAttributes(domElement)
-            )
+        )
 
         # Attach a table cell text item
         tableCellText = new ContentEdit.TableCellText(
             domElement.innerHTML.replace(/^\s+|\s+$/g, '')
-            )
+        )
         tableCell.attach(tableCellText)
 
         return tableCell
@@ -384,7 +491,6 @@ class ContentEdit.TableCellText extends ContentEdit.Text
 
     blur: () ->
         # Remove focus from the element
-
         if @isMounted()
 
             # Blur the DOM element
@@ -404,7 +510,7 @@ class ContentEdit.TableCellText extends ContentEdit.Text
 
         return @parent().can(behaviour)
 
-    html: (indent='') ->
+    html: (indent = '') ->
         # Return a HTML string for the node
 
         # For text elements with optimized output we use a cache to improve
@@ -461,7 +567,7 @@ class ContentEdit.TableCellText extends ContentEdit.Text
                 @_dragTimeout = setTimeout(
                     initDrag,
                     ContentEdit.DRAG_HOLD_DURATION * 2
-                    )
+                )
 
         clearTimeout(@_dragTimeout)
         @_dragTimeout = setTimeout(initDrag, ContentEdit.DRAG_HOLD_DURATION)
@@ -493,7 +599,7 @@ class ContentEdit.TableCellText extends ContentEdit.Text
                 selection = new ContentSelect.Range(
                     previous.content.length(),
                     previous.content.length()
-                    )
+                )
                 selection.select(previous.domElement())
 
             # If this is the last row check we're allowed to
@@ -545,9 +651,9 @@ class ContentEdit.TableCellText extends ContentEdit.Text
                     'next-region',
                     @closest (node) ->
                         node.type() is 'Fixture' or node.type() is 'Region'
-                    )
+                )
 
-        # ...else move down vertically
+            # ...else move down vertically
         else
             nextRow = cell.parent().nextWithTest (node) ->
                 return node.type() is 'TableRow'
@@ -572,38 +678,62 @@ class ContentEdit.TableCellText extends ContentEdit.Text
 
             # Else move to the previous table cell
             @previousContent().focus()
+            return
 
-        else
-            # Check if this is the last table cell in a tbody, if it is add
-            # another row.
-            unless @can('spawn')
-                return
+        # Check if this is the last table cell in a tbody, if it is add
+        # another row.
+        unless @can('spawn')
+            return
 
-            grandParent = cell.parent().parent()
-            if grandParent.tagName() == 'tbody' and @_isLastInSection()
-                row = new ContentEdit.TableRow()
+        grandParent = cell.parent().parent()
+        if grandParent.tagName() == 'tbody' and @_isLastInSection()
+            row = new ContentEdit.TableRow()
 
-                # Copy the structure of this row
-                for child in cell.parent().children
-                    newCell = new ContentEdit.TableCell(
-                            child.tagName(),
-                            child._attributes
-                            )
-                    newCellText = new ContentEdit.TableCellText('')
-                    newCell.attach(newCellText)
-                    row.attach(newCell)
+            colNum = 0
+            thead = grandParent.previousContent().parent().parent()
+            if thead and thead.children
+                colNum = thead.children.length
+            else
+                # grab the max number of columns as we can't use the thead or previous row
+                for gRow in grandParent.children
+                    colNum = Math.max colNum, gRow.children.length
+            colRowspan = new Array(colNum).fill 0
 
-                # Add the new row to the section
-                section = @closest (node) ->
-                    return node.type() is 'TableSection'
-                section.attach(row)
+            # iterate through all cells on all rows on the same column
+            # and keep track of the rowspans
+            for i in [0..colNum - 1]
+                for prevRow in grandParent.children
+                    # continue only if we're in first row and also have a header
+                    continue if @_isInFirstRow() and thead
 
-                # Move the focus to the first cell in the new row
-                row.children[0].tableCellText().focus()
+                    cellIndex = i
+                    previous = prevRow.children[cellIndex]
+                    if previous and previous._attributes.rowspan
+                        rowspan = parseInt previous._attributes.rowspan
+                        colRowspan[cellIndex] += rowspan - 1
+                        cellIndex++
+
+                    if colRowspan[cellIndex] > 0
+                        colRowspan[cellIndex]--
+
+            # we need to create as many cells as columns without an active rowspan
+            colNum = colRowspan.filter((v) -> v is 0).length
+            for i in [0..colNum - 1]
+                newCell = new ContentEdit.TableCell cell.tagName() # don't inherit attributes
+                newCell.attach(new ContentEdit.TableCellText(''))
+                row.attach(newCell)
+
+            # Add the new row to the section
+            section = @closest (node) ->
+                return node.type() is 'TableSection'
+            section.attach(row)
+
+            # Move the focus to the first cell in the new row
+            row.children[0].tableCellText().focus()
 
             # If not the last table cell navigate to the next cell
-            else
-                @nextContent().focus()
+        else
+            @nextContent().focus()
 
     _keyUp: (ev) ->
         selection = ContentSelect.Range.query(@_domElement)
@@ -628,9 +758,9 @@ class ContentEdit.TableCellText extends ContentEdit.Text
                     'previous-region',
                     @closest (node) ->
                         node.type() is 'Fixture' or node.type() is 'Region'
-                    )
+                )
 
-        # ...else move up vertically
+            # ...else move up vertically
         else
             previousRow = cell.parent().previousWithTest (node) ->
                 return node.type() is 'TableRow'
